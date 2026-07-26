@@ -30,7 +30,7 @@ class ExecutionContext:
         diagnostics = [
             Diagnostic(
                 id="unsupported-distribution",
-                level=DiagnosticLevel.BLOCKED,
+                level=DiagnosticLevel.WARNING,
                 title="Distribution non prise en charge",
                 detail=f"Aucune implémentation backend pour la distribution '{distribution}'.",
             ).to_dict()

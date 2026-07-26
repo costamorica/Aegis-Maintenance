@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List, Optional
 
 from aegis_maintenance.backends.base import Backend
@@ -26,14 +27,13 @@ class GentooBackend(Backend):
                 "Portage emerge is not installed",
                 detail="Cannot perform Gentoo diagnostics because `emerge` is unavailable.",
             ))
-            status = "FAILED"
         else:
             diagnostics.append(self._check_world_update_plan())
             profile_warning = self._check_profile(system_context)
             if profile_warning:
                 diagnostics.append(profile_warning)
-            status = "SUCCESS"
 
+        status = self._status_from_diagnostics(diagnostics)
         return self._build_report(
             command="check",
             status=status,
@@ -81,34 +81,87 @@ class GentooBackend(Backend):
             "--pretend",
             "--update",
             "--deep",
+            "--newuse",
             "--with-bdeps=y",
             "@world",
         ])
         if result.returncode != 0:
             return self._diagnostic(
                 "gentoo-update-plan-failed",
-                DiagnosticLevel.WARNING,
+                DiagnosticLevel.ERROR,
                 "Unable to calculate Gentoo world update plan",
                 detail=result.stderr or result.stdout,
                 data={"command": result.command},
             )
-        level = DiagnosticLevel.NOTICE if result.stdout else DiagnosticLevel.OK
-        title = "Gentoo world update candidates found" if result.stdout else "Gentoo world is up to date"
+
+        candidates = self._parse_emerge_world_plan(result.stdout)
+        if candidates:
+            return self._diagnostic(
+                "gentoo-world-plan",
+                DiagnosticLevel.NOTICE,
+                "Gentoo world update candidates found",
+                detail="\n".join(candidates),
+                data={"command": result.command},
+            )
+
         return self._diagnostic(
             "gentoo-world-plan",
-            level,
-            title,
-            detail=result.stdout,
+            DiagnosticLevel.OK,
+            "Gentoo world is up to date",
+            detail="No packages were selected for update by emerge.",
             data={"command": result.command},
         )
 
+    def _parse_emerge_world_plan(self, output: str) -> List[str]:
+        if not output:
+            return []
+
+        lower = output.lower()
+        if "no packages to merge" in lower or "nothing to merge" in lower:
+            return []
+
+        candidates: List[str] = []
+        for line in output.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith(">>>"):
+                continue
+            if stripped.startswith("*") or stripped.startswith("[ebuild]"):
+                candidates.append(stripped)
+                continue
+            if "ebuild" in stripped and "from" in stripped:
+                candidates.append(stripped)
+                continue
+            if stripped.startswith("+ ") or stripped.startswith("- "):
+                candidates.append(stripped)
+                continue
+        return candidates
+
     def _check_profile(self, system_context: Any) -> Optional[Dict[str, Any]]:
-        profile = system_context.os_release.get("VARIANT_ID") or system_context.os_release.get("ID")
+        profile = self._detect_portage_profile()
         if profile and profile != "gentoo":
             return self._diagnostic(
-                "profile-variant",
+                "profile-path",
                 DiagnosticLevel.INFO,
-                "Gentoo profile variant detected",
-                detail=f"Detected {profile}",
+                "Gentoo Portage profile detected",
+                detail=profile,
             )
+        return None
+
+    def _detect_portage_profile(self) -> Optional[str]:
+        profile_path = "/etc/portage/make.profile"
+        if os.path.exists(profile_path):
+            try:
+                if os.path.islink(profile_path):
+                    profile = os.readlink(profile_path)
+                else:
+                    with open(profile_path, "r", encoding="utf-8") as fh:
+                        profile = fh.read().strip()
+                if profile:
+                    if not os.path.isabs(profile):
+                        profile = os.path.normpath(os.path.join(os.path.dirname(profile_path), profile))
+                    return profile
+            except OSError:
+                return None
         return None

@@ -11,17 +11,49 @@ Cette arborescence initiale suit la proposition d’architecture :
 - `docs/architecture/architecture.md` : document fondateur d’architecture.
 - `tests/` : base pour les tests unitaires et d’intégration.
 
-## Installation
+## État actuel
+
+Ce projet est une preuve de concept architecturale pour un outil de maintenance Linux.
+
+- `check` est la seule commande partiellement fonctionnelle.
+- `update`, `clean`, `report` et `doctor` restent des squelettes de commande.
+- Le backend Gentoo analyse un plan `emerge --pretend --update --deep --newuse --with-bdeps=y @world`.
+- La sélection de backend rejette désormais les distributions non supportées.
+
+## Installation recommandée
+
+Pour ne pas polluer l’environnement système, utilisez un environnement virtuel :
 
 ```bash
-python3 -m pip install -e .
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
 ## Exécution
 
 ```bash
-python3 -m aegis_maintenance.cli
+aegis-maintenance check
 ```
+
+Pour une sortie structurée :
+
+```bash
+aegis-maintenance check --format json
+```
+
+ou :
+
+```bash
+aegis-maintenance check --format markdown
+```
+
+## Limitations
+
+- seul `check` est actuellement supporté pour un usage expérimental.
+- `update`, `clean`, `report` et `doctor` sont fournis comme interfaces, pas comme workflows entièrement implémentés.
+- sur Gentoo, l’outil utilise la détection de profil Portage via `/etc/portage/make.profile`.
 
 ## Documentation
 
