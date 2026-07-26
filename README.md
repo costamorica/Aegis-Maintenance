@@ -31,6 +31,8 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
+L’outil est conçu pour être utilisé depuis un environnement isolé, afin d’éviter de mélanger les dépendances avec celles du système.
+
 ## Exécution
 
 ```bash
@@ -48,6 +50,8 @@ ou :
 ```bash
 aegis-maintenance check --format markdown
 ```
+
+Le format `markdown` est utile pour intégrer facilement le rapport dans des notes ou des tickets.
 
 ## Limitations
 
