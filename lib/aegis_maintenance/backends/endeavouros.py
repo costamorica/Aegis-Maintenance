@@ -45,13 +45,8 @@ class EndeavourOSBackend(Backend):
     def update(self, system_context: Any):
         diagnostics: List[Dict[str, Any]] = []
 
-        updater = "checkupdates" if self.executor.which("checkupdates") else None
-        if updater:
-            result = self.executor.run([updater])
-        else:
-            result = self.executor.run(["pacman", "-Qu"])
-
-        if result.returncode == 0 and result.stdout:
+        status, result = self._check_updates_available()
+        if status == "available":
             diagnostics.append(self._diagnostic(
                 "update-plan-available",
                 DiagnosticLevel.NOTICE,
@@ -59,7 +54,7 @@ class EndeavourOSBackend(Backend):
                 detail=result.stdout,
                 data={"command": result.command},
             ))
-        elif result.returncode == 0:
+        elif status == "none":
             diagnostics.append(self._diagnostic(
                 "update-plan-none",
                 DiagnosticLevel.OK,
@@ -76,13 +71,26 @@ class EndeavourOSBackend(Backend):
                 data={"command": result.command},
             ))
 
+        diagnostics.append(self._diagnostic(
+            "update-plan-summary",
+            DiagnosticLevel.INFO,
+            "Mode: update plan",
+            detail="Changes performed: none. This command only generates a read-only plan.",
+            data={"command": result.command},
+        ))
+
         return self._build_report(
             command="update",
             status=self._status_from_diagnostics(diagnostics),
             system_context=system_context,
             diagnostics=diagnostics,
-            actions=[{"note": "Aegis Maintenance EndeavourOS update plan generated."}],
-            metadata={"backend_family": self.family},
+            actions=[{"note": "Mode: update plan; Changes performed: none."}],
+            metadata={
+                "backend_family": self.family,
+                "plan_mode": "update",
+                "changes_performed": "none",
+                "dry_run": True,
+            },
         )
 
     def clean(self, system_context: Any):
@@ -150,14 +158,26 @@ class EndeavourOSBackend(Backend):
             data={"command": result.command},
         )
 
-    def _check_pacman_update(self):
+    def _check_updates_available(self):
         updater = "checkupdates" if self.executor.which("checkupdates") else None
         if updater:
             result = self.executor.run([updater])
-        else:
-            result = self.executor.run(["pacman", "-Qu"])
+            if result.returncode == 0:
+                return "none", result
+            if result.returncode == 2 and result.stdout:
+                return "available", result
+            return "failed", result
 
-        if result.returncode == 0 and result.stdout:
+        result = self.executor.run(["pacman", "-Qu"])
+        if result.returncode == 0:
+            if result.stdout:
+                return "available", result
+            return "none", result
+        return "failed", result
+
+    def _check_pacman_update(self):
+        status, result = self._check_updates_available()
+        if status == "available":
             return self._diagnostic(
                 "updates-available",
                 DiagnosticLevel.NOTICE,
@@ -165,12 +185,12 @@ class EndeavourOSBackend(Backend):
                 detail=result.stdout,
                 data={"command": result.command},
             )
-        if result.returncode != 0 and result.stderr:
+        if status == "failed":
             return self._diagnostic(
                 "updates-check-failed",
                 DiagnosticLevel.WARNING,
                 "Unable to check Pacman updates",
-                detail=result.stderr,
+                detail=result.stderr or result.stdout,
                 data={"command": result.command},
             )
         return self._diagnostic(
@@ -201,15 +221,7 @@ class EndeavourOSBackend(Backend):
 
     def _check_orphans(self):
         result = self.executor.run(["pacman", "-Qdtq"])
-        if result.returncode != 0:
-            return self._diagnostic(
-                "orphans-check-failed",
-                DiagnosticLevel.WARNING,
-                "Unable to determine orphan packages",
-                detail=result.stderr or result.stdout,
-                data={"command": result.command},
-            )
-        if result.stdout:
+        if result.returncode == 0 and result.stdout:
             return self._diagnostic(
                 "orphans-found",
                 DiagnosticLevel.NOTICE,
@@ -217,25 +229,25 @@ class EndeavourOSBackend(Backend):
                 detail=result.stdout,
                 data={"command": result.command},
             )
+        if result.returncode in {0, 1} and not result.stdout:
+            return self._diagnostic(
+                "orphans-none",
+                DiagnosticLevel.OK,
+                "No orphan packages found",
+                detail="",
+                data={"command": result.command},
+            )
         return self._diagnostic(
-            "orphans-none",
-            DiagnosticLevel.OK,
-            "No orphan packages found",
-            detail="",
+            "orphans-check-failed",
+            DiagnosticLevel.WARNING,
+            "Unable to determine orphan packages",
+            detail=result.stderr or result.stdout,
             data={"command": result.command},
         )
 
     def _check_foreign_packages(self):
         result = self.executor.run(["pacman", "-Qm"])
-        if result.returncode != 0:
-            return self._diagnostic(
-                "foreign-packages-failed",
-                DiagnosticLevel.WARNING,
-                "Unable to determine foreign packages",
-                detail=result.stderr or result.stdout,
-                data={"command": result.command},
-            )
-        if result.stdout:
+        if result.returncode == 0 and result.stdout:
             return self._diagnostic(
                 "foreign-packages-found",
                 DiagnosticLevel.NOTICE,
@@ -243,11 +255,19 @@ class EndeavourOSBackend(Backend):
                 detail=result.stdout,
                 data={"command": result.command},
             )
+        if result.returncode in {0, 1} and not result.stdout:
+            return self._diagnostic(
+                "foreign-packages-none",
+                DiagnosticLevel.OK,
+                "No foreign packages found",
+                detail="",
+                data={"command": result.command},
+            )
         return self._diagnostic(
-            "foreign-packages-none",
-            DiagnosticLevel.OK,
-            "No foreign packages found",
-            detail="",
+            "foreign-packages-failed",
+            DiagnosticLevel.WARNING,
+            "Unable to determine foreign packages",
+            detail=result.stderr or result.stdout,
             data={"command": result.command},
         )
 

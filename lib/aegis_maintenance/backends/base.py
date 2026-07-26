@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from aegis_maintenance.diagnostics import Diagnostic, DiagnosticLevel
@@ -74,9 +75,7 @@ class Backend(ABC):
         return Diagnostic(id=id, level=level, title=title, detail=detail, data=data).to_dict()
 
     def _now(self):
-        from datetime import datetime
-
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
     def _timestamp(self) -> str:
         return self._now().strftime("%Y%m%d%H%M%S")
