@@ -16,7 +16,7 @@ Cette arborescence initiale suit la proposition d’architecture :
 Ce projet est une preuve de concept architecturale pour un outil de maintenance Linux.
 
 - `check` est désormais renforcé et fonctionne sur Gentoo, Arch Linux et EndeavourOS.
-- `update` génère un plan de mises à jour sûr pour EndeavourOS.
+- `update` génère maintenant un plan de mise à jour déclaratif et sûr pour EndeavourOS, via un moteur de workflow dry-run (`ExecutionPlan` / `UpdateWorkflow`).
 - `clean`, `report` et `doctor` restent des squelettes de commande.
 - La sélection de backend rejette désormais les distributions non supportées.
 
