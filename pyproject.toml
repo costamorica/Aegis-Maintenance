@@ -1,0 +1,26 @@
+[project]
+name = "aegis-maintenance"
+version = "0.1.0"
+description = "Orchestrateur de maintenance système Linux."
+readme = "README.md"
+authors = [ { name = "Aegis Maintenance" } ]
+requires-python = ">=3.11"
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.scripts]
+aegis-maintenance = "aegis_maintenance.cli:main"
+
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "lib" }
+
+[tool.setuptools.packages.find]
+where = ["lib"]
+include = ["aegis_maintenance*"]

@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from aegis_maintenance.cli import main
+
+if __name__ == '__main__':
+    main()
