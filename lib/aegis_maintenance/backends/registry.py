@@ -21,13 +21,7 @@ class BackendRegistry:
         if distribution_id in self._backends:
             return self._backends[distribution_id]
 
-        os_release = getattr(system_context, "os_release", {}) or {}
-        id_like = os_release.get("ID_LIKE", "").lower()
-        if "gentoo" in id_like and "gentoo" in self._backends:
-            return self._backends["gentoo"]
-        if "endeavouros" in id_like and "endeavouros" in self._backends:
-            return self._backends["endeavouros"]
-        if "arch" in id_like and "arch" in self._backends:
-            return self._backends["arch"]
-
-        return self._backends.get("arch", next(iter(self._backends.values())))
+        matched = [backend for backend in self._backends.values() if backend.matches(system_context)]
+        if not matched:
+            return None
+        return max(matched, key=lambda backend: backend.priority)

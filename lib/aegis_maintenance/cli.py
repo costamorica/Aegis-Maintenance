@@ -17,7 +17,19 @@ def main(argv=None):
     report = context.execute(args.command)
     output = render_report(report, args.format, verbose=args.verbose)
     print(output)
-    return 0
+    return _exit_code(report.status)
+
+
+def _exit_code(status: str) -> int:
+    if status == "SUCCESS":
+        return 0
+    if status == "SUCCESS_WITH_NOTICES":
+        return 1
+    if status in {"ACTION_REQUIRED", "BLOCKED"}:
+        return 2
+    if status == "FAILED":
+        return 3
+    return 4
 
 
 if __name__ == '__main__':

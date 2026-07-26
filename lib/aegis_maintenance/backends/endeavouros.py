@@ -6,8 +6,15 @@ from aegis_maintenance.diagnostics import DiagnosticLevel
 
 class EndeavourOSBackend(Backend):
     identifier = "endeavouros"
+    priority = 10
     supported_distributions = ("endeavouros",)
     family = "arch"
+
+    def matches(self, system_context: Any) -> bool:
+        distribution = (getattr(system_context, "distribution_id", None) or "").lower()
+        os_release = getattr(system_context, "os_release", {}) or {}
+        id_like = os_release.get("ID_LIKE", "").lower()
+        return distribution == "endeavouros" or "endeavouros" in id_like
 
     def check(self, system_context: Any):
         diagnostics: List[Dict[str, Any]] = []

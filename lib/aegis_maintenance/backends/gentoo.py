@@ -6,8 +6,15 @@ from aegis_maintenance.diagnostics import DiagnosticLevel
 
 class GentooBackend(Backend):
     identifier = "gentoo"
+    priority = 20
     supported_distributions = ("gentoo",)
     family = "gentoo"
+
+    def matches(self, system_context: Any) -> bool:
+        distribution = (getattr(system_context, "distribution_id", None) or "").lower()
+        os_release = getattr(system_context, "os_release", {}) or {}
+        id_like = os_release.get("ID_LIKE", "").lower()
+        return distribution == "gentoo" or "gentoo" in id_like
 
     def check(self, system_context: Any):
         diagnostics: List[Dict[str, Any]] = []

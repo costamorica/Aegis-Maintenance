@@ -15,6 +15,13 @@ class Backend(ABC):
     def identifier(self) -> str:
         raise NotImplementedError
 
+    @property
+    def priority(self) -> int:
+        return 0
+
+    def matches(self, system_context: Any) -> bool:
+        return False
+
     @abstractmethod
     def check(self, system_context: Any) -> Report:
         raise NotImplementedError
@@ -73,3 +80,13 @@ class Backend(ABC):
 
     def _timestamp(self) -> str:
         return self._now().strftime("%Y%m%d%H%M%S")
+
+    def _status_from_diagnostics(self, diagnostics: List[Dict[str, Any]]) -> str:
+        levels = {diag.get("level") for diag in diagnostics}
+        if "CRITICAL" in levels or "ERROR" in levels:
+            return "FAILED"
+        if "WARNING" in levels or "NOTICE" in levels:
+            return "SUCCESS_WITH_NOTICES"
+        if "OK" in levels or "INFO" in levels:
+            return "SUCCESS"
+        return "UNKNOWN"

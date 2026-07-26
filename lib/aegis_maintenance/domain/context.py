@@ -1,5 +1,6 @@
 from typing import Any
 
+from aegis_maintenance.diagnostics import Diagnostic, DiagnosticLevel
 from aegis_maintenance.domain.report import Report
 
 
@@ -9,6 +10,9 @@ class ExecutionContext:
         self.backend = backend
 
     def execute(self, command: str) -> Report:
+        if self.backend is None:
+            return self._unsupported_distribution_report(command)
+
         if command == "check":
             return self.backend.check(self.system_context)
         if command == "update":
@@ -20,3 +24,30 @@ class ExecutionContext:
         if command == "doctor":
             return self.backend.doctor(self.system_context)
         raise ValueError(f"Commande inconnue: {command}")
+
+    def _unsupported_distribution_report(self, command: str) -> Report:
+        distribution = getattr(self.system_context, "distribution_id", "unknown") or "unknown"
+        diagnostics = [
+            Diagnostic(
+                id="unsupported-distribution",
+                level=DiagnosticLevel.BLOCKED,
+                title="Distribution non prise en charge",
+                detail=f"Aucune implémentation backend pour la distribution '{distribution}'.",
+            ).to_dict()
+        ]
+        return Report(
+            id=f"unsupported-{command}",
+            timestamp=self._now(),
+            backend="unsupported",
+            distribution=distribution,
+            command=command,
+            status="BLOCKED",
+            diagnostics=diagnostics,
+            actions=[],
+            metadata={"reason": "unsupported distribution"},
+        )
+
+    def _now(self):
+        from datetime import datetime
+
+        return datetime.utcnow()
