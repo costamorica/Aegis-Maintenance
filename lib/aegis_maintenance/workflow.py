@@ -1,28 +1,50 @@
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Dict, List
 
-from aegis_maintenance.domain.plan import ExecutionPlan
+from aegis_maintenance.domain.plan import ExecutionAction, ExecutionPlan
 from aegis_maintenance.domain.report import Report
 
 
-class UpdateWorkflow:
+class UpdatePlanningWorkflow:
     def __init__(self, plan: ExecutionPlan, interactive: bool = False):
         self.plan = plan
         self.interactive = interactive
 
-    def run(self) -> Report:
-        diagnostics = list(self.plan.diagnostics)
-        actions = list(self.plan.actions) if self.plan.actions else []
-        actions.append({"note": "Dry run update plan generated."})
+    def prepare(self) -> ExecutionPlan:
+        return self.plan
 
-        if self.plan.package_changes:
+    def validate_plan(self) -> None:
+        if self.plan is None:
+            raise ValueError("Execution plan is required")
+
+    def execute_plan(self) -> None:
+        if not self.plan.dry_run:
+            raise NotImplementedError("Plan execution is not implemented yet")
+
+    def run(self) -> Report:
+        self.validate_plan()
+        plan = self.prepare()
+        return self.build_report(plan)
+
+    def build_report(self, plan: ExecutionPlan) -> Report:
+        diagnostics = list(plan.diagnostics)
+        actions = [action.to_dict() for action in plan.actions]
+        actions.append(
+            ExecutionAction(
+                id="dry-run-plan-generated",
+                description="Dry run update plan generated.",
+                needs_sudo=False,
+            ).to_dict()
+        )
+
+        if plan.package_changes:
             diagnostics.append(
                 {
                     "id": "update-plan-summary",
                     "level": "NOTICE",
                     "title": "Update plan ready",
-                    "detail": f"{len(self.plan.package_changes)} package(s) will be updated.",
-                    "data": {"package_changes": self.plan.package_changes},
+                    "detail": f"{len(plan.package_changes)} package(s) will be updated.",
+                    "data": {"package_changes": plan.package_changes},
                 }
             )
         else:
@@ -37,29 +59,29 @@ class UpdateWorkflow:
             )
 
         status = self._status_from_diagnostics(diagnostics)
-        metadata = dict(self.plan.metadata)
+        metadata = dict(plan.metadata)
         metadata.update(
             {
-                "dry_run": True,
+                "dry_run": plan.dry_run,
                 "workflow": "update",
                 "plan_mode": "dry_run",
-                "package_changes_count": len(self.plan.package_changes),
+                "package_changes_count": len(plan.package_changes),
             }
         )
 
         return Report(
-            id=f"{self.plan.backend}-{self.plan.command}-{self._timestamp()}",
+            id=f"{plan.backend}-{plan.command}-{self._timestamp()}",
             timestamp=self._now(),
-            backend=self.plan.backend,
-            distribution=self.plan.distribution,
-            command=self.plan.command,
+            backend=plan.backend,
+            distribution=plan.distribution,
+            command=plan.command,
             status=status,
             diagnostics=diagnostics,
             actions=actions,
             metadata=metadata,
         )
 
-    def _status_from_diagnostics(self, diagnostics: list[Dict[str, str]]) -> str:
+    def _status_from_diagnostics(self, diagnostics: List[Dict[str, str]]) -> str:
         levels = {diag.get("level") for diag in diagnostics}
         if "CRITICAL" in levels or "ERROR" in levels:
             return "FAILED"

@@ -2,6 +2,8 @@ from typing import Any, Dict, List
 
 from aegis_maintenance.backends.base import Backend
 from aegis_maintenance.diagnostics import DiagnosticLevel
+from aegis_maintenance.domain.plan import ExecutionAction, ExecutionPlan
+from aegis_maintenance.workflow import UpdatePlanningWorkflow
 
 
 class EndeavourOSBackend(Backend):
@@ -43,10 +45,16 @@ class EndeavourOSBackend(Backend):
         )
 
     def update(self, system_context: Any):
+        plan = self.prepare_update_plan(system_context)
+        return UpdatePlanningWorkflow(plan).run()
+
+    def prepare_update_plan(self, system_context: Any) -> ExecutionPlan:
         diagnostics: List[Dict[str, Any]] = []
 
         status, result = self._check_updates_available()
+        package_changes: List[str] = []
         if status == "available":
+            package_changes = [line.strip() for line in result.stdout.splitlines() if line.strip()]
             diagnostics.append(self._diagnostic(
                 "update-plan-available",
                 DiagnosticLevel.NOTICE,
@@ -79,18 +87,49 @@ class EndeavourOSBackend(Backend):
             data={"command": result.command},
         ))
 
-        return self._build_report(
+        plan_actions: List[ExecutionAction] = [
+            ExecutionAction(
+                id="inspect-update-plan",
+                description="Inspect available package updates",
+                details="Review the available package changes before executing the update.",
+                needs_sudo=False,
+            )
+        ]
+
+        if package_changes:
+            plan_actions.append(
+                ExecutionAction(
+                    id="execute-package-update",
+                    description="Execute package updates",
+                    details="This action requires sudo and would run pacman -Syu.",
+                    needs_sudo=True,
+                )
+            )
+
+        warnings = [diag for diag in diagnostics if diag.get("level") in {"WARNING", "ERROR", "CRITICAL"}]
+        metadata = {
+            "backend_family": self.family,
+            "distribution": system_context.distribution_id or "unknown",
+            "plan_mode": "update",
+            "changes_performed": "none",
+            "dry_run": True,
+        }
+
+        return ExecutionPlan(
+            backend=self.identifier,
             command="update",
-            status=self._status_from_diagnostics(diagnostics),
-            system_context=system_context,
+            distribution=system_context.distribution_id or "unknown",
+            summary=diagnostics[0].get("title") if diagnostics else "Update plan generated",
+            package_changes=package_changes,
+            actions=plan_actions,
             diagnostics=diagnostics,
-            actions=[{"note": "Mode: update plan; Changes performed: none."}],
-            metadata={
-                "backend_family": self.family,
-                "plan_mode": "update",
-                "changes_performed": "none",
-                "dry_run": True,
-            },
+            warnings=warnings,
+            metadata=metadata,
+            preconditions=["pacman must not be locked"],
+            dry_run=True,
+            needs_confirmation=bool(package_changes),
+            needs_sudo=False,
+            can_rollback=False,
         )
 
     def clean(self, system_context: Any):

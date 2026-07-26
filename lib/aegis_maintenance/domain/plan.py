@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
@@ -8,7 +8,7 @@ class ExecutionAction:
     description: str
     details: Optional[str] = None
     needs_sudo: bool = False
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -16,7 +16,7 @@ class ExecutionAction:
             "description": self.description,
             "details": self.details,
             "needs_sudo": self.needs_sudo,
-            "metadata": self.metadata or {},
+            "metadata": self.metadata,
         }
 
 
@@ -26,14 +26,17 @@ class ExecutionPlan:
     command: str
     distribution: str
     summary: str
-    package_changes: List[str]
-    actions: List[ExecutionAction]
-    diagnostics: List[Dict[str, Any]]
-    warnings: List[Dict[str, Any]]
-    metadata: Dict[str, Any]
+    package_changes: List[str] = field(default_factory=list)
+    actions: List[ExecutionAction] = field(default_factory=list)
+    diagnostics: List[Dict[str, Any]] = field(default_factory=list)
+    warnings: List[Dict[str, Any]] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    preconditions: List[str] = field(default_factory=list)
+    dry_run: bool = True
     needs_confirmation: bool = True
-    needs_sudo: bool = True
+    needs_sudo: bool = False
     can_rollback: bool = False
+    rollback_policy: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -46,7 +49,10 @@ class ExecutionPlan:
             "diagnostics": self.diagnostics,
             "warnings": self.warnings,
             "metadata": self.metadata,
+            "preconditions": self.preconditions,
+            "dry_run": self.dry_run,
             "needs_confirmation": self.needs_confirmation,
             "needs_sudo": self.needs_sudo,
             "can_rollback": self.can_rollback,
+            "rollback_policy": self.rollback_policy,
         }

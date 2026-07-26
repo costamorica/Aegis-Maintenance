@@ -93,6 +93,9 @@ class Backend(ABC):
 
     def prepare_update_plan(self, system_context: Any) -> ExecutionPlan:
         report = self.update(system_context)
+        return self._execution_plan_from_report(report, system_context)
+
+    def _execution_plan_from_report(self, report: Report, system_context: Any) -> ExecutionPlan:
         package_changes: List[str] = []
         for diagnostic in report.diagnostics:
             if diagnostic.get("id") in {"update-plan-available", "updates-available"} and diagnostic.get("detail"):
@@ -104,7 +107,7 @@ class Backend(ABC):
                 id="update-plan",
                 description="Generated update plan",
                 details=action_details,
-                needs_sudo=True,
+                needs_sudo=False,
             )
         ]
         warnings = [diag for diag in report.diagnostics if diag.get("level") in {"WARNING", "ERROR", "CRITICAL"}]
@@ -125,6 +128,6 @@ class Backend(ABC):
             warnings=warnings,
             metadata=metadata,
             needs_confirmation=bool(package_changes),
-            needs_sudo=True,
+            needs_sudo=False,
             can_rollback=False,
         )

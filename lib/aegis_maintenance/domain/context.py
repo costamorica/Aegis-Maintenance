@@ -2,7 +2,7 @@ from typing import Any
 
 from aegis_maintenance.diagnostics import Diagnostic, DiagnosticLevel
 from aegis_maintenance.domain.report import Report
-from aegis_maintenance.workflow import UpdateWorkflow
+from aegis_maintenance.workflow import UpdatePlanningWorkflow
 
 
 class ExecutionContext:
@@ -18,7 +18,7 @@ class ExecutionContext:
             return self.backend.check(self.system_context)
         if command == "update":
             plan = self.backend.prepare_update_plan(self.system_context)
-            return UpdateWorkflow(plan).run()
+            return UpdatePlanningWorkflow(plan).run()
         if command == "clean":
             return self.backend.clean(self.system_context)
         if command == "report":

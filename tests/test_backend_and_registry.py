@@ -219,7 +219,9 @@ class TestBackendAndRegistry(unittest.TestCase):
         self.assertEqual("update-plan-available", report.diagnostics[0]["id"])
         self.assertEqual("update-plan-summary", report.diagnostics[1]["id"])
         self.assertIn("read-only", report.diagnostics[1]["detail"])
-        self.assertEqual("Mode: update plan; Changes performed: none.", report.actions[0]["note"])
+        self.assertEqual("inspect-update-plan", report.actions[0]["id"])
+        self.assertFalse(report.actions[0]["needs_sudo"])
+        self.assertEqual("dry-run-plan-generated", report.actions[-1]["id"])
 
     def test_execution_context_update_runs_update_workflow(self):
         class FakeContext:
@@ -241,7 +243,8 @@ class TestBackendAndRegistry(unittest.TestCase):
         self.assertEqual("update-plan-available", report.diagnostics[0]["id"])
         self.assertEqual("update-plan-summary", report.diagnostics[-1]["id"])
         self.assertGreaterEqual(len(report.actions), 1)
-        self.assertIn("Dry run update plan generated", report.actions[-1]["note"])
+        self.assertEqual("dry-run-plan-generated", report.actions[-1]["id"])
+        self.assertFalse(report.actions[-1]["needs_sudo"])
 
     def test_prepare_update_plan_includes_package_changes(self):
         class FakeContext:
@@ -264,7 +267,10 @@ class TestBackendAndRegistry(unittest.TestCase):
         self.assertEqual(2, len(plan.package_changes))
         self.assertIn("pkgconf 3.0.3-1 -> 3.0.4-1", plan.package_changes)
         self.assertTrue(plan.needs_confirmation)
-        self.assertTrue(plan.needs_sudo)
+        self.assertFalse(plan.needs_sudo)
+        execute_action = next((action for action in plan.actions if action.id == "execute-package-update"), None)
+        self.assertIsNotNone(execute_action)
+        self.assertTrue(execute_action.needs_sudo)
 
     def test_endeavouros_update_plan_none_is_ok(self):
         class FakeContext:
