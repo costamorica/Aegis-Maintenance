@@ -27,7 +27,7 @@ class EndeavourOSBackend(Backend):
 
         return self._build_report(
             command="check",
-            status="SUCCESS",
+            status=self._status_from_diagnostics(diagnostics),
             system_context=system_context,
             diagnostics=diagnostics,
             actions=[{"note": "Aegis Maintenance EndeavourOS check completed."}],

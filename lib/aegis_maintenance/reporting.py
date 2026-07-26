@@ -63,6 +63,12 @@ def _render_text(report: Dict[str, Any], verbose: bool) -> str:
         lines.append("Summary:")
         lines.extend([f"  - {level}: {count}" for level, count in levels.items()])
 
+        important = [d for d in report.get("diagnostics", []) if d.get("level") in {"NOTICE", "WARNING", "ERROR", "CRITICAL"}]
+        if important:
+            lines.append("Important diagnostics:")
+            for diagnostic in important:
+                lines.append(_format_diagnostic(diagnostic))
+
     return "\n".join(lines)
 
 
@@ -93,7 +99,10 @@ def _render_markdown(report: Dict[str, Any]) -> str:
     lines.append("")
     lines.append("## Actions")
     for action in report.get("actions", []):
-        lines.append(f"- {json.dumps(action)}")
+        if isinstance(action, dict) and "note" in action:
+            lines.append(f"- {action['note']}")
+        else:
+            lines.append(f"- {json.dumps(action)}")
 
     return "\n".join(lines)
 
