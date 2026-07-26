@@ -221,6 +221,51 @@ class TestBackendAndRegistry(unittest.TestCase):
         self.assertIn("read-only", report.diagnostics[1]["detail"])
         self.assertEqual("Mode: update plan; Changes performed: none.", report.actions[0]["note"])
 
+    def test_execution_context_update_runs_update_workflow(self):
+        class FakeContext:
+            distribution_id = "endeavouros"
+            os_release = {"ID_LIKE": "arch endeavouros"}
+
+        backend = EndeavourOSBackend()
+        result = CommandResult(
+            command=["pacman", "-Qu"],
+            returncode=0,
+            stdout="pkgconf 3.0.3-1 -> 3.0.4-1",
+            stderr="",
+        )
+
+        with patch.object(backend.executor, "which", return_value=None), patch.object(backend.executor, "run", return_value=result):
+            report = ExecutionContext(FakeContext(), backend).execute("update")
+
+        self.assertEqual("SUCCESS_WITH_NOTICES", report.status)
+        self.assertEqual("update-plan-available", report.diagnostics[0]["id"])
+        self.assertEqual("update-plan-summary", report.diagnostics[-1]["id"])
+        self.assertGreaterEqual(len(report.actions), 1)
+        self.assertIn("Dry run update plan generated", report.actions[-1]["note"])
+
+    def test_prepare_update_plan_includes_package_changes(self):
+        class FakeContext:
+            distribution_id = "endeavouros"
+            os_release = {"ID_LIKE": "arch endeavouros"}
+
+        backend = EndeavourOSBackend()
+        result = CommandResult(
+            command=["pacman", "-Qu"],
+            returncode=0,
+            stdout="pkgconf 3.0.3-1 -> 3.0.4-1\npython-3.12.0-1 -> 3.12.1-1",
+            stderr="",
+        )
+
+        with patch.object(backend.executor, "which", return_value=None), patch.object(backend.executor, "run", return_value=result):
+            plan = backend.prepare_update_plan(FakeContext())
+
+        self.assertEqual("endeavouros", plan.backend)
+        self.assertEqual("update", plan.command)
+        self.assertEqual(2, len(plan.package_changes))
+        self.assertIn("pkgconf 3.0.3-1 -> 3.0.4-1", plan.package_changes)
+        self.assertTrue(plan.needs_confirmation)
+        self.assertTrue(plan.needs_sudo)
+
     def test_endeavouros_update_plan_none_is_ok(self):
         class FakeContext:
             distribution_id = "endeavouros"

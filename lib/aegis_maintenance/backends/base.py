@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from aegis_maintenance.diagnostics import Diagnostic, DiagnosticLevel
+from aegis_maintenance.domain.plan import ExecutionAction, ExecutionPlan
 from aegis_maintenance.domain.report import Report
 from aegis_maintenance.execution import CommandExecutor
 
@@ -89,3 +90,41 @@ class Backend(ABC):
         if "OK" in levels or "INFO" in levels:
             return "SUCCESS"
         return "UNKNOWN"
+
+    def prepare_update_plan(self, system_context: Any) -> ExecutionPlan:
+        report = self.update(system_context)
+        package_changes: List[str] = []
+        for diagnostic in report.diagnostics:
+            if diagnostic.get("id") in {"update-plan-available", "updates-available"} and diagnostic.get("detail"):
+                package_changes.extend([line.strip() for line in diagnostic.get("detail", "").splitlines() if line.strip()])
+
+        action_details = report.diagnostics[0].get("detail") if report.diagnostics else None
+        plan_actions = [
+            ExecutionAction(
+                id="update-plan",
+                description="Generated update plan",
+                details=action_details,
+                needs_sudo=True,
+            )
+        ]
+        warnings = [diag for diag in report.diagnostics if diag.get("level") in {"WARNING", "ERROR", "CRITICAL"}]
+        metadata = {
+            "backend_family": getattr(self, "family", None),
+            "distribution": system_context.distribution_id or "unknown",
+            "dry_run": True,
+        }
+
+        return ExecutionPlan(
+            backend=self.identifier,
+            command=report.command,
+            distribution=system_context.distribution_id or "unknown",
+            summary=report.diagnostics[0].get("title") if report.diagnostics else "Update plan generated",
+            package_changes=package_changes,
+            actions=plan_actions,
+            diagnostics=report.diagnostics,
+            warnings=warnings,
+            metadata=metadata,
+            needs_confirmation=bool(package_changes),
+            needs_sudo=True,
+            can_rollback=False,
+        )
