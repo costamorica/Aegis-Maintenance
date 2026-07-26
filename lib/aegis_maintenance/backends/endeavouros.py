@@ -23,6 +23,14 @@ class EndeavourOSBackend(Backend):
         diagnostics.append(self._check_endeavouros_repo())
         diagnostics.append(self._check_pacman_update())
         diagnostics.append(self._check_pacman_db())
+        diagnostics.append(self._check_orphans())
+        diagnostics.append(self._check_foreign_packages())
+        diagnostics.append(self._check_pacman_cache())
+        diagnostics.append(self._check_systemd_failed_services())
+        diagnostics.append(self._check_root_filesystem())
+        diagnostics.append(self._check_disk_space())
+        diagnostics.append(self._check_reboot_recommended())
+        diagnostics.append(self._check_pacsave())
         diagnostics.append(self._check_pacnew())
 
         return self._build_report(
@@ -35,11 +43,46 @@ class EndeavourOSBackend(Backend):
         )
 
     def update(self, system_context: Any):
+        diagnostics: List[Dict[str, Any]] = []
+
+        updater = "checkupdates" if self.executor.which("checkupdates") else None
+        if updater:
+            result = self.executor.run([updater])
+        else:
+            result = self.executor.run(["pacman", "-Qu"])
+
+        if result.returncode == 0 and result.stdout:
+            diagnostics.append(self._diagnostic(
+                "update-plan-available",
+                DiagnosticLevel.NOTICE,
+                "EndeavourOS package updates are available",
+                detail=result.stdout,
+                data={"command": result.command},
+            ))
+        elif result.returncode == 0:
+            diagnostics.append(self._diagnostic(
+                "update-plan-none",
+                DiagnosticLevel.OK,
+                "No package updates are currently available",
+                detail=result.stdout,
+                data={"command": result.command},
+            ))
+        else:
+            diagnostics.append(self._diagnostic(
+                "update-plan-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine package update plan",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            ))
+
         return self._build_report(
             command="update",
-            status="ACTION_REQUIRED",
+            status=self._status_from_diagnostics(diagnostics),
             system_context=system_context,
-            diagnostics=[self._diagnostic("update-not-implemented", DiagnosticLevel.UNKNOWN, "EndeavourOS update not implemented")],
+            diagnostics=diagnostics,
+            actions=[{"note": "Aegis Maintenance EndeavourOS update plan generated."}],
+            metadata={"backend_family": self.family},
         )
 
     def clean(self, system_context: Any):
@@ -153,6 +196,190 @@ class EndeavourOSBackend(Backend):
             DiagnosticLevel.OK,
             "Pacman database is consistent",
             detail=result.stdout,
+            data={"command": result.command},
+        )
+
+    def _check_orphans(self):
+        result = self.executor.run(["pacman", "-Qdtq"])
+        if result.returncode != 0:
+            return self._diagnostic(
+                "orphans-check-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine orphan packages",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        if result.stdout:
+            return self._diagnostic(
+                "orphans-found",
+                DiagnosticLevel.NOTICE,
+                "Orphan packages detected",
+                detail=result.stdout,
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "orphans-none",
+            DiagnosticLevel.OK,
+            "No orphan packages found",
+            detail="",
+            data={"command": result.command},
+        )
+
+    def _check_foreign_packages(self):
+        result = self.executor.run(["pacman", "-Qm"])
+        if result.returncode != 0:
+            return self._diagnostic(
+                "foreign-packages-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine foreign packages",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        if result.stdout:
+            return self._diagnostic(
+                "foreign-packages-found",
+                DiagnosticLevel.NOTICE,
+                "Foreign packages detected",
+                detail=result.stdout,
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "foreign-packages-none",
+            DiagnosticLevel.OK,
+            "No foreign packages found",
+            detail="",
+            data={"command": result.command},
+        )
+
+    def _check_pacman_cache(self):
+        result = self.executor.run(["bash", "-lc", "du -sh /var/cache/pacman/pkg 2>/dev/null || true"])
+        if result.returncode != 0:
+            return self._diagnostic(
+                "pacman-cache-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine pacman cache size",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "pacman-cache-size",
+            DiagnosticLevel.INFO,
+            "Pacman package cache size",
+            detail=result.stdout.strip(),
+            data={"command": result.command},
+        )
+
+    def _check_systemd_failed_services(self):
+        result = self.executor.run(["systemctl", "list-units", "--state=failed", "--no-pager", "--no-legend"])
+        if result.returncode != 0:
+            return self._diagnostic(
+                "systemd-failed-services-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine failed systemd services",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        if result.stdout:
+            return self._diagnostic(
+                "systemd-failed-services",
+                DiagnosticLevel.WARNING,
+                "Failed systemd services detected",
+                detail=result.stdout,
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "systemd-failed-services-none",
+            DiagnosticLevel.OK,
+            "No failed systemd services found",
+            detail="",
+            data={"command": result.command},
+        )
+
+    def _check_root_filesystem(self):
+        result = self.executor.run(["bash", "-lc", "findmnt -n -o SOURCE,TARGET / | tr -s ' '"],)
+        if result.returncode != 0:
+            return self._diagnostic(
+                "root-filesystem-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine root filesystem",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "root-filesystem",
+            DiagnosticLevel.INFO,
+            "Root filesystem information",
+            detail=result.stdout,
+            data={"command": result.command},
+        )
+
+    def _check_disk_space(self):
+        result = self.executor.run(["df", "-h", "/"])
+        if result.returncode != 0:
+            return self._diagnostic(
+                "disk-space-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine root filesystem space",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "disk-space",
+            DiagnosticLevel.INFO,
+            "Root filesystem disk space",
+            detail=result.stdout,
+            data={"command": result.command},
+        )
+
+    def _check_reboot_recommended(self):
+        result = self.executor.run(["bash", "-lc", "[ -f /var/run/reboot-required ] && echo reboot-required || true"])
+        if result.returncode != 0:
+            return self._diagnostic(
+                "reboot-check-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to determine reboot recommendation",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        if result.stdout.strip() == "reboot-required":
+            return self._diagnostic(
+                "reboot-required",
+                DiagnosticLevel.WARNING,
+                "Reboot is recommended",
+                detail="/var/run/reboot-required was detected.",
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "reboot-not-required",
+            DiagnosticLevel.OK,
+            "No reboot is currently recommended",
+            detail="",
+            data={"command": result.command},
+        )
+
+    def _check_pacsave(self):
+        result = self.executor.run(["bash", "-lc", "find /etc -name '*.pacsave' 2>/dev/null | head -n 20"])
+        if result.returncode != 0:
+            return self._diagnostic(
+                "pacsave-check-failed",
+                DiagnosticLevel.WARNING,
+                "Unable to search for .pacsave files",
+                detail=result.stderr or result.stdout,
+                data={"command": result.command},
+            )
+        if result.stdout:
+            return self._diagnostic(
+                "pacsave-files",
+                DiagnosticLevel.NOTICE,
+                ".pacsave files found",
+                detail=result.stdout,
+                data={"command": result.command},
+            )
+        return self._diagnostic(
+            "pacsave-none",
+            DiagnosticLevel.OK,
+            "No .pacsave files found",
+            detail="",
             data={"command": result.command},
         )
 

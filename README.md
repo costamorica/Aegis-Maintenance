@@ -15,9 +15,9 @@ Cette arborescence initiale suit la proposition d’architecture :
 
 Ce projet est une preuve de concept architecturale pour un outil de maintenance Linux.
 
-- `check` est la seule commande partiellement fonctionnelle.
-- `update`, `clean`, `report` et `doctor` restent des squelettes de commande.
-- Le backend Gentoo analyse un plan `emerge --pretend --update --deep --newuse --with-bdeps=y @world`.
+- `check` est désormais renforcé et fonctionne sur Gentoo, Arch Linux et EndeavourOS.
+- `update` génère un plan de mises à jour sûr pour EndeavourOS.
+- `clean`, `report` et `doctor` restent des squelettes de commande.
 - La sélection de backend rejette désormais les distributions non supportées.
 
 ## Installation recommandée
