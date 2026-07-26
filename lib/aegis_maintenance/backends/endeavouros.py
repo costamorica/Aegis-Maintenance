@@ -163,15 +163,19 @@ class EndeavourOSBackend(Backend):
         if updater:
             result = self.executor.run([updater])
             if result.returncode == 0:
+                if result.stdout.strip():
+                    return "available", result
                 return "none", result
-            if result.returncode == 2 and result.stdout:
-                return "available", result
+            if result.returncode == 2:
+                return "none", result
             return "failed", result
 
         result = self.executor.run(["pacman", "-Qu"])
         if result.returncode == 0:
             if result.stdout:
                 return "available", result
+            return "none", result
+        if result.returncode == 2:
             return "none", result
         return "failed", result
 
